@@ -159,6 +159,18 @@ export interface CustomerDailySummary {
     remainingEmpties: number;
 }
 
+export interface CounterUser {
+    id: string;
+    name: string;
+    email: string;
+    phone: string;
+    passwordHash: string;
+    salt: string;
+    createdAt: string;
+    resetToken?: string;
+    resetTokenExpires?: number;
+}
+
 export interface User {
     name: string;
     role: string;

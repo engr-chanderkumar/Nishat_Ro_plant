@@ -28,8 +28,8 @@ const CashRecon: React.FC<CashReconProps> = ({ sales, expenses, inventory, openi
         selected.setHours(0, 0, 0, 0);
 
         // Filter transactions for *before* selected day for opening balance
-        const priorSales = sales.filter(s => new Date(s.date) < selected);
-        const priorExpenses = expenses.filter(e => new Date(e.date) < selected);
+        const priorSales = sales.filter(s => getLocalDateString(s.date) < selectedDate);
+        const priorExpenses = expenses.filter(e => getLocalDateString(e.date) < selectedDate);
         
         // Check if there's a recorded opening balance for the selected date
         const recordedOpeningBalance = openingBalances.find(ob => ob.date === selectedDate);
@@ -50,30 +50,39 @@ const CashRecon: React.FC<CashReconProps> = ({ sales, expenses, inventory, openi
         const todaySales = sales.filter(s => getLocalDateString(s.date) === selectedDate);
         const todayExpenses = expenses.filter(e => getLocalDateString(e.date) === selectedDate);
 
-        // Get inventory item IDs
+        // Get inventory item IDs with safety checks
         const bottle19L = inventory.find(i => is19LItemName(i.name));
         const bottle6L = inventory.find(i => is6LItemName(i.name));
 
         // Revenue calculations for today
         const calcRevenue = (itemId: number | undefined) => {
+            if (!itemId) {
+                // Handle counter sales (items without specific inventory ID)
+                // Exclude payment-only transactions (quantity = 0, amount = 0)
+                const productSales = todaySales.filter(s => s.inventoryItemId === null && s.quantity > 0);
+                const productCash = productSales.filter(s => s.paymentMethod === 'Cash').reduce((sum, s) => sum + s.amountReceived, 0);
+                const productBank = productSales.filter(s => s.paymentMethod === 'Bank').reduce((sum, s) => sum + s.amountReceived, 0);
+                return { cash: productCash, bank: productBank, total: productCash + productBank };
+            }
+
             const productSales = todaySales.filter(s => s.inventoryItemId === itemId);
-            const productCash = productSales.filter(s => s.paymentMethod === 'Cash').reduce((sum, s) => sum + s.amount, 0);
-            const productBank = productSales.filter(s => s.paymentMethod === 'Bank').reduce((sum, s) => sum + s.amount, 0);
+            const productCash = productSales.filter(s => s.paymentMethod === 'Cash').reduce((sum, s) => sum + s.amountReceived, 0);
+            const productBank = productSales.filter(s => s.paymentMethod === 'Bank').reduce((sum, s) => sum + s.amountReceived, 0);
 
             const paymentOnlyForItem = todaySales.filter(s => s.inventoryItemId === null && s.quantity === 0 && s.amount === 0);
             const payments19L = paymentOnlyForItem.filter(s => s.paymentForCategory === '19Ltr Collection');
             const payments6L = paymentOnlyForItem.filter(s => s.paymentForCategory === '6Ltr Collection');
 
             const extraCash = (itemId === bottle19L?.id)
-                ? payments19L.filter(s => s.paymentMethod === 'Cash').reduce((sum, s) => sum + s.amountReceived, 0)
+                ? payments19L.filter(s => s.paymentMethod === 'Cash').reduce((sum, s) => sum + (s.amountReceived || 0), 0)
                 : (itemId === bottle6L?.id)
-                    ? payments6L.filter(s => s.paymentMethod === 'Cash').reduce((sum, s) => sum + s.amountReceived, 0)
+                    ? payments6L.filter(s => s.paymentMethod === 'Cash').reduce((sum, s) => sum + (s.amountReceived || 0), 0)
                     : 0;
 
             const extraBank = (itemId === bottle19L?.id)
-                ? payments19L.filter(s => s.paymentMethod === 'Bank').reduce((sum, s) => sum + s.amountReceived, 0)
+                ? payments19L.filter(s => s.paymentMethod === 'Bank').reduce((sum, s) => sum + (s.amountReceived || 0), 0)
                 : (itemId === bottle6L?.id)
-                    ? payments6L.filter(s => s.paymentMethod === 'Bank').reduce((sum, s) => sum + s.amountReceived, 0)
+                    ? payments6L.filter(s => s.paymentMethod === 'Bank').reduce((sum, s) => sum + (s.amountReceived || 0), 0)
                     : 0;
 
             const cash = productCash + extraCash;
@@ -84,9 +93,13 @@ const CashRecon: React.FC<CashReconProps> = ({ sales, expenses, inventory, openi
         const collection19L = calcRevenue(bottle19L?.id);
         const collection6L = calcRevenue(bottle6L?.id);
         
-        const otherSales = todaySales.filter(s => s.inventoryItemId !== bottle19L?.id && s.inventoryItemId !== bottle6L?.id);
-        const counterSaleCash = otherSales.filter(s => s.paymentMethod === 'Cash').reduce((sum, s) => sum + s.amount, 0);
-        const counterSaleBank = otherSales.filter(s => s.paymentMethod === 'Bank').reduce((sum, s) => sum + s.amount, 0);
+        const otherSales = todaySales.filter(s => 
+            s.inventoryItemId !== bottle19L?.id && 
+            s.inventoryItemId !== bottle6L?.id && 
+            s.inventoryItemId !== null // Exclude payment-only transactions
+        );
+        const counterSaleCash = otherSales.filter(s => s.paymentMethod === 'Cash').reduce((sum, s) => sum + s.amountReceived, 0);
+        const counterSaleBank = otherSales.filter(s => s.paymentMethod === 'Bank').reduce((sum, s) => sum + s.amountReceived, 0);
         const counterSale = { cash: counterSaleCash, bank: counterSaleBank, total: counterSaleCash + counterSaleBank };
 
         const totalRevenue = {
@@ -139,9 +152,12 @@ const CashRecon: React.FC<CashReconProps> = ({ sales, expenses, inventory, openi
 
             if (revenueChartInstance.current) {
                 revenueChartInstance.current.destroy();
+                revenueChartInstance.current = null;
             }
 
-            if (collection19L.total > 0 || collection6L.total > 0 || counterSale.total > 0) {
+            const hasData = collection19L.total > 0 || collection6L.total > 0 || counterSale.total > 0;
+            
+            if (hasData) {
                  revenueChartInstance.current = new Chart(revenueChartRef.current, {
                     type: 'pie',
                     data: chartData,
@@ -157,6 +173,14 @@ const CashRecon: React.FC<CashReconProps> = ({ sales, expenses, inventory, openi
                 });
             }
         }
+        
+        // Cleanup function
+        return () => {
+            if (revenueChartInstance.current) {
+                revenueChartInstance.current.destroy();
+                revenueChartInstance.current = null;
+            }
+        };
     }, [reconData]);
 
 

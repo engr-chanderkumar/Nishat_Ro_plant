@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { getDatabase, saveDatabase } from '../../db/database';
-import { Sale } from '../../types';
+import { Sale, CounterUser } from '../../types';
 import { getLocalDateString, getTodayLocalDateString } from '../../utils/date';
 import { inferPaymentCategoryFromInventory } from '../../utils/payment-category';
 import { PlusCircleIcon, LogoutIcon, WaterDropIcon, DollarSignIcon, CreditCardIcon, PackageIcon, TrashIcon } from '../icons';
@@ -8,7 +8,7 @@ import AddCounterSaleModal from './AddCounterSaleModal';
 import StatCard from '../dashboard/StatCard';
 import ConfirmationModal from '../common/ConfirmationModal';
 
-const CounterView: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
+const CounterView: React.FC<{ user: CounterUser | null; onLogout: () => void }> = ({ user, onLogout }) => {
     const [db, setDb] = useState(getDatabase());
     const [isAddSaleOpen, setAddSaleOpen] = useState(false);
     const [quickSalePaymentMethod, setQuickSalePaymentMethod] = useState<'Cash' | 'Bank'>('Cash');
@@ -163,15 +163,17 @@ const CounterView: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
     return (
         <>
             <div className="min-h-screen bg-brand-bg">
-                <header className="h-20 bg-brand-surface border-b border-gray-200 flex items-center justify-between px-6">
-                    <div className="flex items-center">
-                        <WaterDropIcon className="h-8 w-8 mr-3 text-brand-blue" />
-                        <h1 className="text-2xl font-bold text-brand-text-primary">Counter Sales</h1>
+                <header className="bg-white shadow-sm border-b">
+                    <div className="px-6 py-4 flex justify-between items-center">
+                        <div>
+                            <h1 className="text-2xl font-bold text-brand-text-primary">Counter Sales</h1>
+                            {user && <p className="text-sm text-brand-text-secondary">Welcome, {user.name}</p>}
+                        </div>
+                        <button onClick={onLogout} className="flex items-center text-brand-text-secondary hover:text-red-600 transition-colors">
+                            <LogoutIcon className="h-6 w-6 mr-2" />
+                            <span className="text-sm font-medium">End Session</span>
+                        </button>
                     </div>
-                    <button onClick={onLogout} className="flex items-center text-brand-text-secondary hover:text-red-600 transition-colors">
-                        <LogoutIcon className="h-6 w-6 mr-2" />
-                        <span className="text-sm font-medium">End Session</span>
-                    </button>
                 </header>
                 <main className="p-6">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
